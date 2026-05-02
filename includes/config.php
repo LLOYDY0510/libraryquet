@@ -1,9 +1,12 @@
 <?php
 // ============================================================
-// LIBRARY QUIET MONITORING SYSTEM — CONFIG
-// UPDATED: canDo() removed (depended on deleted role_rules table).
-//          Zone permissions now controlled directly by hasRole().
-//          All other helpers unchanged.
+// LQMS — includes/config.php
+//
+// CHANGES FROM PREVIOUS VERSION:
+//   1. logActivity() now parses + writes the browser column
+//      added to activity_logs in the updated setup.sql.
+//   2. DB_PASS placeholder — fill in your actual password.
+//      Never commit real credentials to version control.
 // ============================================================
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -11,13 +14,16 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // ── Base URL ──────────────────────────────────────────────────
-define('BASE_URL', '/library-saba');
+// Change to match your deployment path.
+// Local XAMPP example:  '/library-saba'
+// Shared hosting root:  '' (empty string)
+define('BASE_URL', '/');
 
 // ── Database ──────────────────────────────────────────────────
 define('DB_HOST',    'localhost');
-define('DB_NAME',    'u442411629_librarysaba');
-define('DB_USER',    'u442411629_dev_library');
-define('DB_PASS',    '6nV6$5BSLjjl');
+define('DB_NAME',    'saba');
+define('DB_USER',    'root');              // ← your actual username
+define('DB_PASS',    '');            // ← your actual password
 define('DB_CHARSET', 'utf8mb4');
 
 // ── App Meta ──────────────────────────────────────────────────
@@ -26,9 +32,9 @@ define('APP_SHORT',   'LQMS');
 define('APP_VERSION', '1.0.0');
 
 // ── Noise Thresholds (dB) ─────────────────────────────────────
-define('NOISE_SAFE',    40);
-define('NOISE_WARNING', 60);
-define('NOISE_CRITICAL',75);
+define('NOISE_SAFE',     40);
+define('NOISE_WARNING',  60);
+define('NOISE_CRITICAL', 75);
 
 // ── Simulation interval: 7 minutes ───────────────────────────
 define('SIM_INTERVAL_SECONDS', 420);
@@ -40,7 +46,7 @@ date_default_timezone_set('Asia/Manila');
 function getDB(): PDO {
     static $pdo = null;
     if ($pdo === null) {
-        $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
+        $dsn     = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
         $options = [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -49,11 +55,11 @@ function getDB(): PDO {
         try {
             $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
         } catch (PDOException $e) {
-            die('<div style="font-family:monospace;color:#c0392b;padding:20px;">
-                 <strong>Database Connection Failed.</strong><br>
-                 Please contact your system administrator.<br><br>
-                 <small>Error: ' . htmlspecialchars($e->getMessage()) . '</small>
-                 </div>');
+            die('<div style="font-family:monospace;color:#c0392b;padding:20px;">'
+              . '<strong>Database Connection Failed.</strong><br>'
+              . 'Please contact your system administrator.<br><br>'
+              . '<small>Error: ' . htmlspecialchars($e->getMessage()) . '</small>'
+              . '</div>');
         }
     }
     return $pdo;
@@ -106,16 +112,34 @@ function noiseLabel(float $db): string {
     return 'Loud';
 }
 
+// ── Browser Parser ────────────────────────────────────────────
+// Parses a raw HTTP_USER_AGENT string into a short browser name.
+// Used by logActivity() to populate the browser column.
+function parseBrowser(string $ua): string {
+    if (str_contains($ua, 'Edg'))     return 'Edge';
+    if (str_contains($ua, 'OPR')
+     || str_contains($ua, 'Opera'))   return 'Opera';
+    if (str_contains($ua, 'Chrome'))  return 'Chrome';
+    if (str_contains($ua, 'Firefox')) return 'Firefox';
+    if (str_contains($ua, 'Safari'))  return 'Safari';
+    if (str_contains($ua, 'MSIE')
+     || str_contains($ua, 'Trident')) return 'IE';
+    return 'Other';
+}
+
 // ── Activity Logger ───────────────────────────────────────────
 // Logs every important system action to the activity_logs table.
-// Called throughout the system for login, logout, CRUD, alerts, etc.
+// Updated: now also writes to the `browser` column added in
+// the latest setup.sql revision.
 function logActivity(string $action, string $detail = '', string $page = ''): void {
     if (!isLoggedIn()) return;
-    $u = currentUser();
+    $u  = currentUser();
+    $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
     try {
         getDB()->prepare(
-            'INSERT INTO activity_logs (user_id, user_name, user_role, action, detail, page, ip, user_agent)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+            'INSERT INTO activity_logs
+               (user_id, user_name, user_role, action, detail, page, ip, browser, user_agent)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         )->execute([
             $u['id'],
             $u['name'],
@@ -124,34 +148,36 @@ function logActivity(string $action, string $detail = '', string $page = ''): vo
             $detail,
             $page ?: basename($_SERVER['PHP_SELF'], '.php'),
             $_SERVER['REMOTE_ADDR'] ?? '',
-            substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
+            parseBrowser($ua),
+            substr($ua, 0, 255),
         ]);
-    } catch (Exception $e) { /* silent — never break the page for a log failure */ }
+    } catch (Exception $e) {
+        // Silent — a log failure must never break the page
+    }
 }
 
 // ── Zone Permission Checks ────────────────────────────────────
-// Replaces the old canDo() function that queried the role_rules table.
-// Permissions are now hardcoded by role:
+// Role-based permission helper. Replaces the old canDo() that
+// queried the deleted role_rules table.
 //
-//   Administrator  → full access to everything
-//   Library Manager→ can add/edit/override zones, view/generate reports, resolve alerts
-//   Library Staff  → can resolve alerts only (read-only everywhere else)
+//   Administrator   → full access
+//   Library Manager → zones, reports, alerts
+//   Library Staff   → resolve alerts only
 //
 function canDo(string $action): bool {
-    // Administrator can always do everything
     if (hasRole('Administrator')) return true;
 
     $role = currentUser()['role'] ?? '';
 
-    $managerPerms = ['add_zone', 'edit_zone', 'override_zone', 'view_reports', 'gen_reports', 'resolve_alert'];
-    $staffPerms   = ['resolve_alert'];
+    $managerPerms = [
+        'add_zone', 'edit_zone', 'delete_zone',
+        'override_zone', 'view_reports', 'gen_reports',
+        'resolve_alert',
+    ];
+    $staffPerms = ['resolve_alert'];
 
-    if ($role === 'Library Manager') {
-        return in_array($action, $managerPerms, true);
-    }
-    if ($role === 'Library Staff') {
-        return in_array($action, $staffPerms, true);
-    }
+    if ($role === 'Library Manager') return in_array($action, $managerPerms, true);
+    if ($role === 'Library Staff')   return in_array($action, $staffPerms,   true);
 
     return false;
 }
