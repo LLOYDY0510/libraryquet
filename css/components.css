@@ -1,202 +1,208 @@
 /* ============================================================
-   LQMS — components.css
-   Page-specific & component styles
+   components.css
+   Reusable component & page-specific styles.
+   All shared classes live here; layout primitives are in main.css.
    ============================================================ */
 
-/* ── Login Page ───────────────────────────────────────────── */
-.login-page {
-    min-height: 100vh;
-    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #bfdbfe 100%);
-    display: flex;
+/* ── Battery Indicator ────────────────────────────────────── */
+.battery {
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    padding: 24px;
-}
-
-.login-card {
-    background: #fff;
-    border-radius: 20px;
-    padding: 40px 36px;
-    width: 100%;
-    max-width: 400px;
-    box-shadow: 0 8px 40px rgba(37,99,235,.15);
-}
-
-.login-logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 28px;
-}
-
-.login-logo-icon {
-    width: 48px; height: 48px;
-    background: var(--blue-600);
-    color: #fff;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.login-logo-text h1 {
-    font-family: var(--font-head);
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--gray-900);
-}
-
-.login-logo-text p {
+    gap: 5px;
     font-size: 11px;
+    font-weight: 600;
+}
+
+.battery-bar {
+    width: 24px; height: 12px;
+    border: 1.5px solid currentColor;
+    border-radius: 3px;
+    padding: 1.5px;
+    position: relative;
+    flex-shrink: 0;
+}
+
+/* The nub on the right */
+.battery-bar::after {
+    content: '';
+    position: absolute;
+    right: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px; height: 6px;
+    background: currentColor;
+    border-radius: 0 2px 2px 0;
+}
+
+.battery-fill {
+    height: 100%;
+    border-radius: 1.5px;
+    background: currentColor;
+    transition: width .4s ease;
+}
+
+.battery.high { color: var(--safe); }
+.battery.mid  { color: var(--warn); }
+.battery.low  { color: var(--crit); }
+
+/* ── Sensor Status Dot ────────────────────────────────────── */
+.sensor-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--safe);
+}
+
+.sensor-status::before {
+    content: '';
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--safe-mid);
+    animation: pulse 2s infinite;
+    flex-shrink: 0;
+}
+
+.sensor-status.inactive {
     color: var(--gray-400);
-    text-transform: uppercase;
-    letter-spacing: .5px;
+}
+.sensor-status.inactive::before {
+    background: var(--gray-300);
+    animation: none;
 }
 
-.login-tagline {
-    font-size: 13px;
-    color: var(--gray-500);
-    margin-bottom: 24px;
-    padding-bottom: 24px;
-    border-bottom: 1px solid var(--gray-100);
-}
-
-.login-error {
-    background: var(--crit-bg);
-    color: var(--crit);
-    border: 1px solid #fca5a5;
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 13px;
-    margin-bottom: 16px;
-}
+/* Legacy alias used in dashboard.php */
+.sensor-dot { composes: sensor-status; }
 
 /* ── Zone Cards ───────────────────────────────────────────── */
 .zones-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 18px;
     margin-bottom: 24px;
 }
 
 .zone-card {
     background: #fff;
-    border: 2px solid var(--gray-200);
+    border: 1.5px solid var(--gray-200);
     border-radius: var(--radius-lg);
-    padding: 20px;
-    box-shadow: var(--shadow);
-    transition: all .2s;
+    padding: 18px 20px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow .2s, border-color .2s;
     position: relative;
     overflow: hidden;
 }
 
-.zone-card.zone-safe  { border-color: var(--safe); }
-.zone-card.zone-warn  { border-color: var(--warn); }
-.zone-card.zone-crit  { border-color: var(--crit); }
+.zone-card:hover { box-shadow: var(--shadow); }
 
+.zone-card.zone-safe     { border-color: rgba(5,150,105,.35); }
+.zone-card.zone-warning  { border-color: rgba(217,119,6,.35); }
+.zone-card.zone-critical { border-color: rgba(220,38,38,.45); }
+
+/* Legacy shorthand names */
+.zone-card.zone-warn { border-color: rgba(217,119,6,.35); }
+.zone-card.zone-crit { border-color: rgba(220,38,38,.45); }
+
+.zone-card.zone-critical,
 .zone-card.zone-crit {
-    animation: critPulse 2s infinite;
+    animation: critPulse 2s ease-in-out infinite;
 }
 
 @keyframes critPulse {
-    0%, 100% { box-shadow: var(--shadow); }
-    50% { box-shadow: 0 0 0 4px rgba(239,68,68,.15); }
+    0%, 100% { box-shadow: var(--shadow-sm); }
+    50%       { box-shadow: 0 0 0 4px rgba(220,38,38,.12); }
 }
 
 .zone-card-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
 }
 
 .zone-name {
-    font-family: var(--font-head);
-    font-size: 15px;
+    font-size: 14.5px;
     font-weight: 700;
     color: var(--gray-900);
+    line-height: 1.2;
 }
 
-.zone-floor {
-    font-size: 11.5px;
+.zone-meta-line {
+    font-size: 11px;
     color: var(--gray-400);
     margin-top: 2px;
 }
 
-.zone-db-display {
-    text-align: right;
-}
+/* Large dB readout on zone card */
+.zone-db-display { text-align: right; }
 
 .zone-db-num {
-    font-family: var(--font-head);
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 700;
     line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--gray-700);
 }
+.zone-db-num.safe,
+.zone-db-num.safe     { color: var(--safe); }
+.zone-db-num.warning,
+.zone-db-num.warn     { color: var(--warn); }
+.zone-db-num.critical,
+.zone-db-num.crit     { color: var(--crit); }
 
 .zone-db-unit {
-    font-size: 11px;
+    font-size: 10.5px;
     color: var(--gray-400);
     font-weight: 500;
+    margin-top: 2px;
 }
 
-.zone-db-num.safe { color: var(--safe); }
-.zone-db-num.warn { color: var(--warn); }
-.zone-db-num.crit { color: var(--crit); }
-
-.zone-progress {
-    margin: 14px 0;
-}
-
+/* Zone progress bar */
 .zone-prog-bar {
-    height: 8px;
+    height: 7px;
     background: var(--gray-100);
     border-radius: 4px;
     overflow: hidden;
-    position: relative;
-    margin-bottom: 6px;
+    margin: 12px 0 6px;
 }
 
 .zone-prog-fill {
     height: 100%;
     border-radius: 4px;
     transition: width .8s cubic-bezier(.4,0,.2,1);
+    background: var(--safe-mid);
 }
-
-.zone-prog-fill.safe { background: var(--safe); }
-.zone-prog-fill.warn { background: var(--warn); }
-.zone-prog-fill.crit {
-    background: linear-gradient(90deg, var(--warn), var(--crit));
-}
+.zone-prog-fill.warning,
+.zone-prog-fill.warn { background: var(--warn-mid); }
+.zone-prog-fill.critical,
+.zone-prog-fill.crit { background: linear-gradient(90deg, var(--warn-mid), var(--crit-mid)); }
 
 .zone-thresholds {
     display: flex;
     justify-content: space-between;
     font-size: 10px;
     color: var(--gray-400);
+    margin-bottom: 14px;
 }
 
-.zone-meta {
+.zone-meta-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
-    margin-top: 14px;
-    padding-top: 14px;
+    padding-top: 12px;
     border-top: 1px solid var(--gray-100);
+    margin-top: 2px;
 }
 
-.zone-meta-item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
+.zone-meta-item { display: flex; flex-direction: column; gap: 2px; }
 
 .zone-meta-label {
-    font-size: 10px;
+    font-size: 9.5px;
     text-transform: uppercase;
-    letter-spacing: .5px;
+    letter-spacing: .6px;
     color: var(--gray-400);
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .zone-meta-val {
@@ -211,59 +217,18 @@
     margin-top: 14px;
 }
 
-/* ── Battery indicator ────────────────────────────────────── */
-.battery {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    font-weight: 600;
-}
-
-.battery-bar {
-    width: 24px;
-    height: 12px;
-    border: 1.5px solid currentColor;
-    border-radius: 3px;
-    padding: 1.5px;
-    position: relative;
-}
-
-.battery-bar::after {
-    content: '';
-    position: absolute;
-    right: -5px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 6px;
-    background: currentColor;
-    border-radius: 0 2px 2px 0;
-}
-
-.battery-fill {
-    height: 100%;
-    border-radius: 1.5px;
-    background: currentColor;
-}
-
-.battery.high  { color: var(--safe); }
-.battery.mid   { color: var(--warn); }
-.battery.low   { color: var(--crit); }
-
-/* ── Alert List ───────────────────────────────────────────── */
+/* ── Alert Items ──────────────────────────────────────────── */
 .alert-item {
     display: flex;
     align-items: flex-start;
-    gap: 14px;
-    padding: 14px 0;
+    gap: 13px;
+    padding: 13px 0;
     border-bottom: 1px solid var(--gray-100);
 }
-
 .alert-item:last-child { border-bottom: none; }
 
 .alert-icon {
-    width: 36px; height: 36px;
+    width: 34px; height: 34px;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -271,40 +236,37 @@
     flex-shrink: 0;
 }
 
-.alert-icon.warn { background: var(--warn-bg); color: var(--warn); }
-.alert-icon.crit { background: var(--crit-bg); color: var(--crit); }
+.alert-icon.warning,
+.alert-icon.warn     { background: var(--warn-bg); color: var(--warn); }
+.alert-icon.critical,
+.alert-icon.crit     { background: var(--crit-bg); color: var(--crit); }
 .alert-icon.resolved { background: var(--safe-bg); color: var(--safe); }
 
-.alert-body { flex: 1; }
-
-.alert-zone {
-    font-weight: 700;
-    font-size: 13px;
-    color: var(--gray-900);
-}
-
-.alert-desc {
-    font-size: 12.5px;
-    color: var(--gray-500);
-    margin-top: 2px;
-}
-
-.alert-time {
-    font-size: 11px;
-    color: var(--gray-400);
-    margin-top: 4px;
-}
-
+.alert-body  { flex: 1; min-width: 0; }
+.alert-zone  { font-weight: 700; font-size: 13px; color: var(--gray-900); }
+.alert-desc  { font-size: 12.5px; color: var(--gray-500); margin-top: 2px; }
+.alert-time  { font-size: 11px; color: var(--gray-400); margin-top: 4px; }
 .alert-actions { flex-shrink: 0; }
 
-/* ── Chart wrapper ────────────────────────────────────────── */
+/* ── Chart Wrapper ────────────────────────────────────────── */
 .chart-container {
     width: 100%;
     height: 220px;
     position: relative;
 }
 
-/* ── Users Table Extras ───────────────────────────────────── */
+/* ── Dashboard Layout ─────────────────────────────────────── */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+}
+
+@media (max-width: 1100px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Role Badges ──────────────────────────────────────────── */
 .role-badge {
     display: inline-flex;
     align-items: center;
@@ -318,54 +280,652 @@
 .role-manager { background: var(--blue-100); color: var(--blue-700); }
 .role-staff   { background: var(--gray-100); color: var(--gray-600); }
 
-/* ── Dashboard grid ───────────────────────────────────────── */
-.dashboard-grid {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 20px;
+/* ── Zone Row (dashboard zone overview list) ──────────────── */
+.zone-row {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--gray-100);
+}
+.zone-row:last-child { border-bottom: none; }
+
+.zone-row-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
 }
 
-@media (max-width: 1024px) {
-    .dashboard-grid { grid-template-columns: 1fr; }
+.zone-row-meta {
+    font-size: 10.5px;
+    color: var(--gray-400);
+    margin-top: 5px;
 }
 
-/* ── Mini sparkline ───────────────────────────────────────── */
+/* ── Simulation Status Widget ─────────────────────────────── */
+.sim-status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12.5px;
+    color: var(--gray-500);
+    padding: 5px 0;
+    border-bottom: 1px solid var(--gray-100);
+}
+.sim-status-row:last-child { border-bottom: none; }
+
+.sim-status-val {
+    font-weight: 600;
+    color: var(--gray-700);
+}
+
+/* ── Map Card ─────────────────────────────────────────────── */
+.map-legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.map-legend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid;
+}
+.map-chip-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+.map-chip-safe { background: var(--safe-bg); border-color: rgba(5,150,105,.25); color: #065f46; }
+.map-chip-warn { background: var(--warn-bg); border-color: rgba(217,119,6,.25);  color: #92400e; }
+.map-chip-crit { background: var(--crit-bg); border-color: rgba(220,38,38,.25);  color: #991b1b; }
+
+/* ── Activity Log Feed ────────────────────────────────────── */
+.act-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--gray-100);
+}
+.act-row:last-child { border-bottom: none; }
+
+.act-icon {
+    width: 30px; height: 30px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 13px;
+}
+
+.act-body { flex: 1; min-width: 0; }
+
+.act-user {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--gray-800);
+}
+
+.act-detail {
+    font-size: 11.5px;
+    color: var(--gray-500);
+    margin-top: 1px;
+}
+
+.act-footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 3px;
+    font-size: 10.5px;
+    color: var(--gray-300);
+}
+
+.act-time { margin-left: auto; }
+
+/* ── Mini Sparklines ──────────────────────────────────────── */
 .sparkline {
     display: flex;
     align-items: flex-end;
     gap: 3px;
-    height: 40px;
+    height: 36px;
 }
 
 .spark-bar {
     flex: 1;
-    background: var(--blue-200);
+    background: var(--blue-100);
     border-radius: 2px;
     transition: height .4s ease;
     min-width: 4px;
 }
-
 .spark-bar.warn { background: var(--warn-bg); }
 .spark-bar.crit { background: var(--crit-bg); }
 
-/* ── Sensor status dot ────────────────────────────────────── */
-.sensor-dot {
+/* ── Dashboard-specific additions ────────────────────────────── */
+
+/* Left/right column structure */
+.dash-col-left  { display: flex; flex-direction: column; }
+.dash-col-right { display: flex; flex-direction: column; }
+
+/* Zone row inside the overview card */
+.zone-row-name {
+    font-weight: 600;
+    font-size: 13.5px;
+    color: var(--gray-900);
+}
+
+.zone-row-sub {
+    font-size: 11px;
+    color: var(--gray-400);
+    margin-left: 6px;
+}
+
+.zone-row-badges {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Inline action link row at bottom of a card */
+.card-action-row {
+    margin-top: 14px;
+    text-align: right;
+}
+
+/* Subtitle under a card-title-lg */
+.card-subtitle {
+    font-size: 11.5px;
+    color: var(--gray-400);
+    margin-top: 2px;
+}
+
+/* Small footer note (e.g. "Last updated: ...") */
+.card-footer-note {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--gray-400);
+    text-align: right;
+}
+
+/* Zone map container */
+.zone-map-container {
+    height: 380px;
+    border-radius: var(--radius);
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+}
+
+/* Activity feed */
+.activity-feed { min-height: 100px; }
+
+.act-loading {
+    text-align: center;
+    padding: 30px;
+    color: var(--gray-400);
+    font-size: 13px;
+}
+
+/* Activity log header right cluster */
+.act-header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.act-stat {
+    font-size: 11.5px;
+    color: var(--gray-400);
+}
+
+.act-stat strong {
+    color: var(--blue-600);
+}
+
+/* ── Zones page additions ─────────────────────────────────────── */
+
+/* Floor/sensor subtitle inside a zone card */
+.zone-floor {
+    font-size: 11.5px;
+    color: var(--gray-400);
+    margin-top: 2px;
+}
+
+/* Progress bar wrapper — ensures consistent bottom spacing */
+.zone-progress { margin-bottom: 4px; }
+
+/* Page-level flash message (replaces 100% inline-styled div) */
+.page-flash {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 20px;
+    border-left: 3px solid;
+}
+.page-flash.ok    { background: var(--safe-bg); color: var(--safe); border-color: var(--safe); }
+.page-flash.error { background: var(--crit-bg); color: var(--crit); border-color: var(--crit); }
+
+/* Modal 2-col form grid */
+.modal-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.modal-form-grid .form-group.full { grid-column: span 2; }
+
+/* Modal footer action row */
+.modal-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--gray-100);
+}
+
+/* Delete confirm modal — warning body */
+.delete-confirm-body {
+    text-align: center;
+    padding: 8px 0 20px;
+}
+
+.delete-confirm-icon {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: var(--crit-bg);
+    color: var(--crit);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 14px;
+}
+
+.delete-confirm-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: 6px;
+}
+
+.delete-confirm-sub {
+    font-size: 13px;
+    color: var(--gray-500);
+    line-height: 1.5;
+}
+
+.delete-confirm-zone {
+    font-weight: 700;
+    color: var(--gray-900);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SHARED TABLE UTILITIES
+   Used across alerts, reports, users, activity_log
+   ══════════════════════════════════════════════════════════════ */
+
+.td-bold    { font-weight: 600; }
+.td-id      { font-size: 11.5px; color: var(--gray-400); font-family: monospace; letter-spacing: .3px; }
+.td-meta    { font-size: 12.5px; color: var(--gray-500); }
+.td-sub     { font-size: 11.5px; color: var(--gray-400); display: block; margin-top: 1px; }
+.td-notes   { font-size: 12px; color: var(--gray-500); max-width: 220px; }
+.td-detail  { font-size: 12px; color: var(--gray-500); max-width: 260px; }
+.td-threshold { font-size: 12.5px; color: var(--gray-600); white-space: nowrap; }
+.td-rownum  { font-size: 11px; color: var(--gray-400); }
+.td-mono    { font-size: 11.5px; color: var(--gray-400); font-family: monospace; }
+.td-datetime { font-size: 12px; color: var(--gray-500); white-space: nowrap; }
+.td-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.td-empty   { text-align: center; padding: 40px; color: var(--gray-400); }
+
+/* Selected table row */
+.row-selected { background: var(--blue-50) !important; }
+
+/* dB reading typography */
+.db-reading {
+    font-weight: 700;
+    font-size: 13.5px;
+    font-variant-numeric: tabular-nums;
+}
+.db-reading-safe { color: var(--safe); }
+.db-reading-warn { color: var(--warn); }
+.db-reading-crit { color: var(--crit); }
+.db-reading-lg   { font-size: 22px; }
+
+/* Inline form (used in tables where a form wraps one button) */
+.form-inline { display: inline; }
+
+/* Textarea that shouldn't resize */
+.textarea-noresize { resize: none; }
+
+/* "you" badge next to current user */
+.you-badge {
     display: inline-flex;
+    align-items: center;
+    background: var(--blue-100);
+    color: var(--blue-700);
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+}
+
+/* User cell: avatar + name inline */
+.user-cell {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.user-avatar-sm {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+}
+
+/* Page chip (activity log page column) */
+.page-chip {
+    display: inline-block;
+    font-size: 11px;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    padding: 2px 8px;
+    border-radius: 5px;
+    color: var(--gray-500);
+    font-family: monospace;
+}
+
+/* ── Pagination ──────────────────────────────────────────── */
+.pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--gray-100);
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.pagination-info {
+    font-size: 12px;
+    color: var(--gray-400);
+}
+
+.pagination-pages {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.page-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid var(--gray-200);
+    color: var(--gray-600);
+    background: var(--gray-50);
+    transition: all .12s;
+}
+.page-btn:hover   { background: var(--blue-50); border-color: var(--blue-200); color: var(--blue-600); }
+.page-btn.active  { background: var(--blue-600); border-color: var(--blue-600); color: #fff; }
+
+.pagination-ellipsis {
+    font-size: 13px;
+    color: var(--gray-400);
+    padding: 0 4px;
+    user-select: none;
+}
+
+/* ── Filter bar ──────────────────────────────────────────── */
+.filter-card { padding: 16px 20px; margin-bottom: 18px; }
+
+.filter-form {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.filter-field {
+    flex: 1;
+    min-width: 150px;
+}
+
+.filter-field-date { min-width: 140px; flex: 0 1 160px; }
+
+.filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    padding-bottom: 1px;
+}
+
+/* ── Filter tabs (alerts status buttons) ─────────────────── */
+.filter-tabs { display: flex; gap: 6px; }
+
+/* ── Alerts layout ───────────────────────────────────────── */
+.alerts-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+}
+
+.alerts-layout.has-detail {
+    grid-template-columns: 1fr 360px;
+}
+
+@media (max-width: 1000px) {
+    .alerts-layout.has-detail { grid-template-columns: 1fr; }
+}
+
+/* ── Alert detail panel ──────────────────────────────────── */
+.alert-detail-col { display: flex; flex-direction: column; gap: 16px; }
+
+.alert-detail-card { }
+
+.alert-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.alert-detail-zone {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-900);
+}
+
+.alert-detail-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.alert-detail-stat { }
+
+.alert-detail-stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--gray-400);
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.alert-detail-stat-val  { font-size: 13px; font-weight: 600; color: var(--gray-700); }
+.alert-detail-stat-sub  { font-size: 11px; color: var(--gray-400); }
+
+.alert-detail-msg {
+    background: var(--gray-50);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 12.5px;
+    color: var(--gray-600);
+    margin-bottom: 12px;
+    border: 1px solid var(--gray-100);
+}
+
+.alert-resolved-note {
+    display: flex;
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    font-weight: 600;
+    color: var(--safe);
+    background: var(--safe-bg);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    margin-top: 8px;
 }
 
-.sensor-dot::before {
-    content: '';
-    width: 8px; height: 8px;
-    border-radius: 50%;
+/* ── Message thread ──────────────────────────────────────── */
+.msg-thread {
+    max-height: 260px;
+    overflow-y: auto;
+    margin-bottom: 14px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--gray-200) transparent;
+}
+
+.msg-item {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--gray-100);
+}
+.msg-item:last-child { border-bottom: none; }
+
+.msg-system { opacity: .6; }
+
+.msg-meta {
+    font-size: 11px;
+    margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.msg-from  { font-weight: 700; color: var(--blue-700); }
+.msg-role  { color: var(--gray-400); }
+.msg-dot   { color: var(--gray-300); }
+.msg-time  { color: var(--gray-400); margin-left: auto; }
+
+.msg-body  { font-size: 13px; color: var(--gray-700); }
+.msg-system .msg-body { font-style: italic; }
+
+.msg-empty {
+    text-align: center;
+    padding: 20px;
+    color: var(--gray-400);
+    font-size: 13px;
+}
+
+.msg-compose { display: flex; flex-direction: column; gap: 8px; }
+
+.msg-textarea { resize: none; }
+
+.msg-send-btn { width: 100%; justify-content: center; }
+
+/* Green "safe" action button (Resolve) */
+.btn-safe {
     background: var(--safe);
-    animation: pulse 2s infinite;
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(5,150,105,.25);
+}
+.btn-safe:hover { background: #047857; }
+
+/* ── Page header actions cluster ─────────────────────────── */
+.page-header-actions { display: flex; gap: 8px; align-items: center; }
+
+/* ── Missing classes found in audit ──────────────────────── */
+
+/* .alert-resolve-form — hidden form on the alert detail card
+   that gets submitted by the resolve confirm modal button.
+   No visual, just needs to exist without affecting layout. */
+.alert-resolve-form { display: none; }
+
+/* .auth-clock — live clock spans in the login page footer
+   and status strip. Styled inline by login.js; this class
+   just provides the tabular-nums baseline. */
+.auth-clock {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .3px;
 }
 
-.sensor-dot.inactive::before {
-    background: var(--gray-300);
-    animation: none;
+/* .chart-legend — container for dataset labels next to the
+   noise history chart header on the dashboard. */
+.chart-legend {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 11.5px;
+    color: var(--gray-500);
 }
+
+/* .zone-description — italic description text at the bottom
+   of each zone card (optional field). */
+.zone-description {
+    font-size: 12px;
+    color: var(--gray-400);
+    margin-top: 10px;
+    font-style: italic;
+    line-height: 1.5;
+}
+
+/* ── Modal size variants ──────────────────────────────────── */
+/* Replaces style="max-width:Npx" on .modal elements */
+.modal-sm  { max-width: 400px; }
+.modal-md  { max-width: 520px; }
+
+/* ── Stat value colour variants ──────────────────────────── */
+/* Replaces style="color:var(--safe/warn/crit)" on .stat-value */
+.stat-value.safe { color: var(--safe); }
+.stat-value.warn { color: var(--warn); }
+.stat-value.crit { color: var(--crit); }
+
+/* ── Stacked card spacing ─────────────────────────────────── */
+/* Replaces style="margin-top:20px" on .card elements that
+   follow another card in the same column */
+.card-stack { margin-top: 20px; }
+
+/* ── Zone threshold labels ────────────────────────────────── */
+/* Replaces style="color:var(--warn/crit)" on threshold spans */
+.threshold-warn { color: var(--warn); }
+.threshold-crit { color: var(--crit); }
+
+/* ── Resolve confirm icon (safe variant) ─────────────────── */
+/* Replaces style="background:var(--safe-bg);color:var(--safe)"
+   on .delete-confirm-icon inside the resolve modal */
+.delete-confirm-icon.safe {
+    background: var(--safe-bg);
+    color: var(--safe);
+}
+
+/* ── Badge nudge ─────────────────────────────────────────── */
+/* Replaces style="margin-top:4px" on badges inside the
+   alert detail stat grid */
+.badge-nudge { margin-top: 4px; display: inline-flex; }
+
+/* ── Map chip dot colours ─────────────────────────────────── */
+.map-chip-dot-safe { background: var(--safe); }
+.map-chip-dot-warn { background: var(--warn); }
+.map-chip-dot-crit { background: var(--crit); }
