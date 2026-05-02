@@ -1,17 +1,24 @@
 // ============================================================
-// LQMS — app.js
-// Core client-side logic: clock, sidebar, toast, alert polling
+//  app.js
+// Core client-side logic: BASE_URL, clock, sidebar, toasts,
+// alert badge polling, zone level refresh, modal helpers.
 // ============================================================
 
-const BASE_URL = (document.querySelector('[data-base]')?.dataset.base) || '/library-saba';
+// ── BASE_URL ──────────────────────────────────────────────────
+// Read from the <meta name="base-url"> tag injected by layout.php.
+// This avoids both the fragile data-attribute hack and the hardcoded
+// fallback string that would break on re-deployment.
+const BASE_URL = (() => {
+    const meta = document.querySelector('meta[name="base-url"]');
+    return meta ? meta.getAttribute('content') : '';
+})();
 
 // ── Live Clock ────────────────────────────────────────────────
 (function initClock() {
     const el = document.getElementById('liveClock');
     if (!el) return;
     const tick = () => {
-        const now = new Date();
-        el.textContent = now.toLocaleTimeString('en-PH', {
+        el.textContent = new Date().toLocaleTimeString('en-PH', {
             hour: '2-digit', minute: '2-digit', second: '2-digit'
         });
     };
@@ -19,14 +26,21 @@ const BASE_URL = (document.querySelector('[data-base]')?.dataset.base) || '/libr
     setInterval(tick, 1000);
 })();
 
-// ── Sidebar toggle (mobile) ───────────────────────────────────
+// ── Sidebar Toggle (mobile) ───────────────────────────────────
 (function initSidebar() {
-    const toggle = document.getElementById('menuToggle');
+    const toggle  = document.getElementById('menuToggle');
     const sidebar = document.getElementById('sidebar');
     if (!toggle || !sidebar) return;
-    toggle.addEventListener('click', () => sidebar.classList.toggle('open'));
+
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sidebar.classList.toggle('open');
+    });
+
     document.addEventListener('click', (e) => {
-        if (!sidebar.contains(e.target) && !toggle.contains(e.target)) {
+        if (sidebar.classList.contains('open') &&
+            !sidebar.contains(e.target) &&
+            !toggle.contains(e.target)) {
             sidebar.classList.remove('open');
         }
     });
@@ -41,26 +55,32 @@ const Toast = (() => {
         document.body.appendChild(wrap);
     }
 
+    /**
+     * @param {string} title
+     * @param {string} msg
+     * @param {'info'|'warn'|'crit'|'ok'|'safe'} type
+     * @param {number} duration  milliseconds
+     */
     function show(title, msg, type = 'info', duration = 5000) {
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
-        toast.innerHTML = `<div class="toast-title">${title}</div>
-                           <div class="toast-msg">${msg}</div>`;
+        toast.innerHTML =
+            `<div class="toast-title">${title}</div>
+             <div class="toast-msg">${msg}</div>`;
         wrap.appendChild(toast);
         setTimeout(() => {
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateX(120%)';
-            toast.style.transition = 'all .3s ease';
-            setTimeout(() => toast.remove(), 300);
+            toast.style.transition = 'opacity .3s, transform .3s';
+            toast.style.opacity    = '0';
+            toast.style.transform  = 'translateX(110%)';
+            setTimeout(() => toast.remove(), 320);
         }, duration);
     }
 
     return { show };
 })();
 
-// ── Active Alert Badge Polling ────────────────────────────────
-// Polls every 30 seconds just to update the sidebar badge count.
-// This is very lightweight — one tiny JSON call.
+// ── Alert Badge Polling ───────────────────────────────────────
+// Lightweight: one tiny JSON request every 30 s.
 (function initAlertBadge() {
     const badge = document.getElementById('alertBadge');
     if (!badge) return;
@@ -70,22 +90,22 @@ const Toast = (() => {
             .then(r => r.json())
             .then(data => {
                 if (data.count > 0) {
-                    badge.textContent = data.count;
-                    badge.style.display = 'flex';
+                    badge.textContent     = data.count;
+                    badge.style.display   = 'flex';
                 } else {
-                    badge.style.display = 'none';
+                    badge.style.display   = 'none';
                 }
             })
             .catch(() => {});
     };
 
     update();
-    setInterval(update, 30000); // every 30s — safe, very small payload
+    setInterval(update, 30_000);
 })();
 
-// ── Zone Level Live Update ────────────────────────────────────
-// Called from dashboard/zones page after simulation ticks.
-// Refreshes zone cards without full page reload.
+// ── Zone Level Live Refresh ───────────────────────────────────
+// Called by the dashboard countdown and zones page after each
+// simulation tick. Updates DOM without a full page reload.
 function refreshZoneLevels() {
     fetch(`${BASE_URL}/api/zone_levels.php`, { cache: 'no-store' })
         .then(r => r.json())
@@ -96,38 +116,43 @@ function refreshZoneLevels() {
 
                 const pct = Math.min((z.level / 90) * 100, 100);
 
-                // Dashboard uses .db-bar-fill + .db-val
+                // Dashboard list uses .db-bar-fill + .db-val
                 const dbFill = card.querySelector('.db-bar-fill');
                 const dbVal  = card.querySelector('.db-val');
                 if (dbFill) {
-                    dbFill.style.width = pct + '%';
-                    dbFill.className = `db-bar-fill ${z.status}`;
+                    dbFill.style.width = `${pct}%`;
+                    dbFill.className   = `db-bar-fill ${z.status}`;
                 }
                 if (dbVal) {
-                    dbVal.textContent = parseFloat(z.level).toFixed(1) + ' dB';
-                    dbVal.className = `db-val zone-db-num ${z.status}`;
+                    dbVal.textContent = `${parseFloat(z.level).toFixed(1)} dB`;
+                    dbVal.className   = `db-val zone-db-num ${z.status}`;
                 }
 
-                // Zones page uses .zone-prog-fill + .zone-db-num
+                // Zones page cards use .zone-prog-fill + .zone-db-num
                 const fill = card.querySelector('.zone-prog-fill');
                 const num  = card.querySelector('.zone-db-num');
                 if (fill) {
-                    fill.style.width = pct + '%';
-                    fill.className = `zone-prog-fill ${z.status}`;
+                    fill.style.width = `${pct}%`;
+                    fill.className   = `zone-prog-fill ${z.status}`;
                 }
                 if (num) {
                     num.textContent = parseFloat(z.level).toFixed(1);
-                    num.className = `zone-db-num ${z.status}`;
+                    num.className   = `zone-db-num ${z.status}`;
                 }
 
-                // Update card status class
+                // Keep zone-card border colour in sync
                 if (card.classList.contains('zone-card')) {
                     card.className = `zone-card zone-${z.status}`;
                 }
 
-                // Fire toast on new critical
+                // Fire toast on newly-critical zone
                 if (z.status === 'critical' && card.dataset.lastStatus !== 'critical') {
-                    Toast.show('⚠️ Noise Alert', `${z.name} exceeded critical threshold (${parseFloat(z.level).toFixed(1)} dB)`, 'crit', 8000);
+                    Toast.show(
+                        '⚠️ Noise Alert',
+                        `${z.name} exceeded critical threshold (${parseFloat(z.level).toFixed(1)} dB)`,
+                        'crit',
+                        8000
+                    );
                 }
                 card.dataset.lastStatus = z.status;
             });
@@ -135,32 +160,28 @@ function refreshZoneLevels() {
         .catch(() => {});
 }
 
-// ── dB Progress Bars (initial render) ────────────────────────
+// ── Progress Bar Initial Render ───────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    // Cover both dashboard (.db-bar-fill) and zones page (.zone-prog-fill)
-    document.querySelectorAll('.zone-prog-fill[data-pct], .db-bar-fill[data-pct]').forEach(el => {
-        const pct = parseFloat(el.dataset.pct) || 0;
-        setTimeout(() => { el.style.width = pct + '%'; }, 80);
-    });
+    document.querySelectorAll('.zone-prog-fill[data-pct], .db-bar-fill[data-pct]')
+        .forEach(el => {
+            const pct = parseFloat(el.dataset.pct) || 0;
+            // Tiny delay lets the browser paint 0-width first for the transition
+            setTimeout(() => { el.style.width = `${pct}%`; }, 80);
+        });
 });
 
-// ── Modal helpers ─────────────────────────────────────────────
-function openModal(id) {
-    document.getElementById(id)?.classList.add('open');
-}
+// ── Modal Helpers ─────────────────────────────────────────────
+function openModal(id)  { document.getElementById(id)?.classList.add('open'); }
+function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
 
-function closeModal(id) {
-    document.getElementById(id)?.classList.remove('open');
-}
-
-// Close modal on overlay click
+// Close on backdrop click
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal-overlay')) {
         e.target.classList.remove('open');
     }
 });
 
-// Close modal on Escape
+// Close on Escape
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         document.querySelectorAll('.modal-overlay.open')
