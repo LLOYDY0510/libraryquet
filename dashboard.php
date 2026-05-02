@@ -5,160 +5,172 @@
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 requireLogin();
+logActivity('Viewed Dashboard', 'Viewed the main dashboard', 'dashboard');
 
-$db = getDB();
+$db        = getDB();
 $pageTitle = 'Dashboard';
+$pageSubtitle = 'Live noise levels across all monitored zones';
 
-// Fetch zone summary
-$zones = $db->query('SELECT * FROM zones WHERE status = "active" ORDER BY id')->fetchAll();
+// ── Zone summary ──────────────────────────────────────────────
+$zones = $db->query(
+    'SELECT * FROM zones WHERE status = "active" ORDER BY id'
+)->fetchAll();
 
-// Active alerts count
-$alertCount = $db->query('SELECT COUNT(*) FROM alerts WHERE status = "active"')->fetchColumn();
+// ── Alert counts ──────────────────────────────────────────────
+$alertCount = $db->query(
+    'SELECT COUNT(*) FROM alerts WHERE status = "active"'
+)->fetchColumn();
 
-// Recent alerts
 $recentAlerts = $db->query(
     'SELECT * FROM alerts ORDER BY created_at DESC LIMIT 5'
 )->fetchAll();
 
-// Stats
-$totalZones   = count($zones);
-$critZones    = 0;
-$warnZones    = 0;
-$safeZones    = 0;
+// ── Stat counters ─────────────────────────────────────────────
+$totalZones = count($zones);
+$critZones  = 0;
+$warnZones  = 0;
+$safeZones  = 0;
 foreach ($zones as $z) {
     $s = noiseStatus($z['level']);
-    if ($s === 'critical') $critZones++;
-    elseif ($s === 'warning') $warnZones++;
-    else $safeZones++;
+    if ($s === 'critical')     $critZones++;
+    elseif ($s === 'warning')  $warnZones++;
+    else                       $safeZones++;
 }
 
-// Chart data: last 10 readings per zone (from alerts or simulated history)
-// We pull the last 8 hours of simulated averages from alert records
+// ── Chart data: last 10 alert readings per zone ───────────────
 $chartLabels = [];
 $chartData   = [];
 foreach ($zones as $z) {
     $rows = $db->prepare(
-        'SELECT level, alert_time FROM alerts WHERE zone_name = ? ORDER BY created_at DESC LIMIT 10'
+        'SELECT level, alert_time FROM alerts
+         WHERE zone_name = ? ORDER BY created_at DESC LIMIT 10'
     );
     $rows->execute([$z['name']]);
-    $history = $rows->fetchAll();
-    $history = array_reverse($history);
+    $history = array_reverse($rows->fetchAll());
     $chartData[$z['id']] = array_map(fn($r) => (float)$r['level'], $history);
     if (empty($chartLabels) && !empty($history)) {
         $chartLabels = array_map(fn($r) => $r['alert_time'], $history);
     }
 }
 
-// ── Leaflet CSS must be declared BEFORE layout.php so it renders inside <head> ──
+// ── Extra head content ────────────────────────────────────────
 $extraStyles = '
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
-.map-legend-chip {
-    display:inline-flex; align-items:center; gap:6px;
-    padding:4px 12px; border-radius:20px; font-size:11.5px; font-weight:600;
-    border:1px solid;
-}
-.map-chip-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-.safe-chip { background:var(--safe-bg);  border-color:rgba(16,185,129,.3); color:#065f46; }
-.warn-chip { background:var(--warn-bg);  border-color:rgba(245,158,11,.3); color:#92400e; }
-.crit-chip { background:var(--crit-bg);  border-color:rgba(239,68,68,.3);  color:#991b1b; }
+/* ── Leaflet popup styling ── */
 .leaflet-popup-content-wrapper {
-    border-radius:10px !important;
-    box-shadow:0 8px 24px rgba(0,0,0,.14) !important;
-    border:1px solid #e2e8f0 !important;
-    padding:0 !important; overflow:hidden;
+    border-radius: 12px !important;
+    box-shadow: 0 8px 28px rgba(0,0,0,.12) !important;
+    border: 1px solid var(--gray-200) !important;
+    padding: 0 !important;
+    overflow: hidden;
 }
 .leaflet-popup-content {
-    margin:0 !important;
-    font-family:"DM Sans",sans-serif !important;
-    font-size:13px !important; line-height:1.5 !important; min-width:190px;
+    margin: 0 !important;
+    font-family: "Plus Jakarta Sans", sans-serif !important;
+    font-size: 13px !important;
+    min-width: 200px;
 }
-.leaflet-popup-tip-container { margin-top:-1px; }
+.leaflet-popup-tip-container { margin-top: -1px; }
+
+/* ── Zone map marker pulse ── */
 @keyframes mapPulse {
-    0%,100% { box-shadow:0 0 0 0 rgba(var(--pulse-rgb),.5); }
-    50%      { box-shadow:0 0 0 8px rgba(var(--pulse-rgb),0); }
+    0%, 100% { box-shadow: 0 0 0 0   rgba(var(--pulse-rgb), .5); }
+    50%      { box-shadow: 0 0 0 10px rgba(var(--pulse-rgb), 0); }
 }
 .zone-marker-critical { animation: mapPulse 1.6s ease-in-out infinite; }
+
+/* ── Activity feed flash ── */
+@keyframes actFlash {
+    0%   { background: rgba(37,99,235,.10); }
+    100% { background: transparent; }
+}
 </style>';
 
 include __DIR__ . '/includes/layout.php';
 ?>
 
-<div data-base="<?= BASE_URL ?>">
-
-<!-- Stats Row -->
+<!-- ════════════════════════════════════════════════════════════
+     STAT CARDS
+     ════════════════════════════════════════════════════════════ -->
 <div class="stats-grid">
+
     <div class="stat-card">
         <div class="stat-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
                 <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
         </div>
         <div class="stat-value"><?= $totalZones ?></div>
-        <div class="stat-label">Total Zones Monitored</div>
+        <div class="stat-label">Zones Monitored</div>
     </div>
 
     <div class="stat-card safe-card">
         <div class="stat-icon safe">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"/>
             </svg>
         </div>
-        <div class="stat-value" style="color:var(--safe)"><?= $safeZones ?></div>
+        <div class="stat-value safe"><?= $safeZones ?></div>
         <div class="stat-label">Zones in Safe Range</div>
     </div>
 
     <div class="stat-card warn-card">
         <div class="stat-icon warn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                 <line x1="12" y1="9" x2="12" y2="13"/>
                 <line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
         </div>
-        <div class="stat-value" style="color:var(--warn)"><?= $warnZones ?></div>
+        <div class="stat-value warn"><?= $warnZones ?></div>
         <div class="stat-label">Zones with Warnings</div>
     </div>
 
     <div class="stat-card crit-card">
         <div class="stat-icon crit">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10"/>
                 <line x1="12" y1="8" x2="12" y2="12"/>
                 <line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
         </div>
-        <div class="stat-value" style="color:var(--crit)"><?= $critZones ?></div>
+        <div class="stat-value crit"><?= $critZones ?></div>
         <div class="stat-label">Critical Alerts Active</div>
     </div>
+
 </div>
 
-<!-- Main Grid -->
+<!-- ════════════════════════════════════════════════════════════
+     MAIN GRID  (left: zone overview + chart | right: alerts + sim)
+     ════════════════════════════════════════════════════════════ -->
 <div class="dashboard-grid">
 
-    <!-- Left: Zones Overview -->
-    <div>
-        <div class="card" style="margin-bottom:20px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-                <div class="card-title" style="margin-bottom:0">Zone Overview</div>
-                <span class="sensor-dot">All Sensors Online</span>
+    <!-- ── LEFT COLUMN ─────────────────────────────────────── -->
+    <div class="dash-col-left">
+
+        <!-- Zone Overview -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">Zone Overview</span>
+                <span class="sensor-status">All Sensors Online</span>
             </div>
 
             <?php foreach ($zones as $z):
-                $status = noiseStatus($z['level']);
-                $pct    = min(($z['level'] / 90) * 100, 100);
-                $label  = noiseLabel($z['level']);
-                $bat    = (int)$z['battery'];
+                $status   = noiseStatus($z['level']);
+                $pct      = min(($z['level'] / 90) * 100, 100);
+                $label    = noiseLabel($z['level']);
+                $bat      = (int)$z['battery'];
                 $batClass = $bat > 60 ? 'high' : ($bat > 30 ? 'mid' : 'low');
             ?>
-            <div style="padding:14px 0;border-bottom:1px solid var(--gray-100);" data-zone="<?= $z['id'] ?>" class="zone-row">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div class="zone-row" data-zone="<?= $z['id'] ?>">
+                <div class="zone-row-header">
                     <div>
-                        <span style="font-weight:600;font-size:13.5px;color:var(--gray-900)"><?= htmlspecialchars($z['name']) ?></span>
-                        <span style="font-size:11px;color:var(--gray-400);margin-left:8px"><?= htmlspecialchars($z['floor']) ?> · <?= htmlspecialchars($z['sensor']) ?></span>
+                        <span class="zone-row-name"><?= htmlspecialchars($z['name']) ?></span>
+                        <span class="zone-row-sub"><?= htmlspecialchars($z['floor']) ?> · <?= htmlspecialchars($z['sensor']) ?></span>
                     </div>
-                    <div style="display:flex;align-items:center;gap:10px;">
+                    <div class="zone-row-badges">
                         <span class="battery <?= $batClass ?>">
                             <span class="battery-bar">
                                 <span class="battery-fill" style="width:<?= $bat ?>%"></span>
@@ -168,38 +180,47 @@ include __DIR__ . '/includes/layout.php';
                         <span class="badge badge-<?= $status === 'safe' ? 'safe' : ($status === 'warning' ? 'warn' : 'crit') ?>"><?= $label ?></span>
                     </div>
                 </div>
+
                 <div class="db-bar-wrap">
                     <div class="db-bar">
-                        <div class="db-bar-fill <?= $status ?>" style="width:0"
+                        <div class="db-bar-fill <?= $status ?>"
+                             style="width:0"
                              data-pct="<?= round($pct, 1) ?>"></div>
                     </div>
                     <div class="db-val zone-db-num <?= $status ?>"><?= number_format($z['level'], 1) ?> dB</div>
                 </div>
-                <div style="font-size:10.5px;color:var(--gray-400);margin-top:5px;">
-                    Warn: <?= $z['warn_threshold'] ?>dB &nbsp;|&nbsp;
-                    Critical: <?= $z['crit_threshold'] ?>dB &nbsp;|&nbsp;
+
+                <div class="zone-row-meta">
+                    Warn: <?= $z['warn_threshold'] ?>dB &nbsp;·&nbsp;
+                    Critical: <?= $z['crit_threshold'] ?>dB &nbsp;·&nbsp;
                     Occupied: <?= $z['occupied'] ?>/<?= $z['capacity'] ?>
                 </div>
             </div>
             <?php endforeach; ?>
 
-            <div style="margin-top:14px;text-align:right;">
+            <div class="card-action-row">
                 <a href="<?= BASE_URL ?>/zones.php" class="btn btn-outline btn-sm">View All Zones →</a>
             </div>
         </div>
 
         <!-- Noise History Chart -->
-        <div class="card">
-            <div class="card-title">Noise Level History</div>
-            <canvas id="noiseChart" class="chart-container" style="height:220px;"></canvas>
+        <div class="card card-stack">
+            <div class="card-header">
+                <span class="card-title">Noise Level History</span>
+                <span class="chart-legend" id="chartLegend"></span>
+            </div>
+            <canvas id="noiseChart" class="chart-container"></canvas>
         </div>
-    </div>
 
-    <!-- Right: Recent Alerts -->
-    <div>
+    </div><!-- /dash-col-left -->
+
+    <!-- ── RIGHT COLUMN ────────────────────────────────────── -->
+    <div class="dash-col-right">
+
+        <!-- Recent Alerts -->
         <div class="card">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-                <div class="card-title" style="margin-bottom:0">Recent Alerts</div>
+            <div class="card-header">
+                <span class="card-title">Recent Alerts</span>
                 <?php if ($alertCount > 0): ?>
                 <span class="badge badge-crit"><?= $alertCount ?> Active</span>
                 <?php endif; ?>
@@ -207,28 +228,22 @@ include __DIR__ . '/includes/layout.php';
 
             <?php if (empty($recentAlerts)): ?>
             <div class="empty-state">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                     <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 01-3.46 0"/>
                 </svg>
                 <h3>No alerts yet</h3>
-                <p>System is monitoring all zones.</p>
+                <p>All zones are within normal range.</p>
             </div>
             <?php else: ?>
+
             <?php foreach ($recentAlerts as $a): ?>
             <div class="alert-item">
                 <div class="alert-icon <?= $a['status'] === 'resolved' ? 'resolved' : $a['type'] ?>">
                     <?php if ($a['type'] === 'critical'): ?>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <line x1="12" y1="8" x2="12" y2="12"/>
-                        <line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                     <?php else: ?>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/>
-                        <line x1="12" y1="17" x2="12.01" y2="17"/>
-                    </svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                     <?php endif; ?>
                 </div>
                 <div class="alert-body">
@@ -244,406 +259,115 @@ include __DIR__ . '/includes/layout.php';
             </div>
             <?php endforeach; ?>
 
-            <div style="margin-top:12px;text-align:right;">
+            <div class="card-action-row">
                 <a href="<?= BASE_URL ?>/alerts.php" class="btn btn-outline btn-sm">All Alerts →</a>
             </div>
+
             <?php endif; ?>
         </div>
 
         <!-- Simulation Status -->
-        <div class="card" style="margin-top:20px;">
-            <div class="card-title">Simulation Status</div>
-            <div style="font-size:13px;color:var(--gray-500);line-height:1.8;">
-                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                    <span>Mode</span>
-                    <span class="badge badge-blue">Simulated IoT</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                    <span>Data Interval</span>
-                    <span style="font-weight:600;color:var(--gray-700)">Every 7 min</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                    <span>Averaging</span>
-                    <span style="font-weight:600;color:var(--gray-700)">Per interval</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;">
-                    <span>Next Read</span>
-                    <span style="font-weight:600;color:var(--blue-600)" id="nextRead">Calculating…</span>
-                </div>
+        <div class="card card-stack">
+            <div class="card-header">
+                <span class="card-title">Simulation Status</span>
+                <span class="badge badge-blue">Simulated IoT</span>
+            </div>
+            <div class="sim-status-row">
+                <span>Data Interval</span>
+                <span class="sim-status-val">Every 7 min</span>
+            </div>
+            <div class="sim-status-row">
+                <span>Averaging</span>
+                <span class="sim-status-val">Per interval</span>
+            </div>
+            <div class="sim-status-row">
+                <span>Next Read</span>
+                <span class="sim-status-val" id="nextRead">Calculating…</span>
             </div>
         </div>
-    </div>
-</div>
 
+    </div><!-- /dash-col-right -->
+</div><!-- /dashboard-grid -->
+
+<!-- ════════════════════════════════════════════════════════════
+     ZONE MAP  (Admin & Library Manager only)
+     ════════════════════════════════════════════════════════════ -->
 <?php if (hasRole('Administrator', 'Library Manager')): ?>
-<!-- ═══════════════════════════════════════════════════════════
-     ZONE MAP — Admin & Manager only
-     Leaflet map with live dB markers for each zone
-     ═══════════════════════════════════════════════════════════ -->
-<div class="card map-card" style="margin-top:20px;">
-
-    <!-- Map header row -->
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+<div class="card card-stack">
+    <div class="card-header">
         <div>
-            <div class="card-title" style="margin-bottom:2px;">
-                🗺️ Zone Map — NBSC Campus
-            </div>
-            <div style="font-size:12px;color:var(--gray-400);">
-                Live noise markers &nbsp;·&nbsp; Updates every 30s
-            </div>
+            <div class="card-title-lg">🗺️ Zone Map — NBSC Campus</div>
+            <div class="card-subtitle">Live noise markers · updates every 30 s</div>
         </div>
-
-        <!-- Legend chips -->
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <div class="map-legend-chip safe-chip">
-                <span class="map-chip-dot" style="background:var(--safe)"></span>
+        <div class="map-legend">
+            <span class="map-legend-chip map-chip-safe">
+                <span class="map-chip-dot map-chip-dot-safe"></span>
                 Quiet &lt;40 dB
-            </div>
-            <div class="map-legend-chip warn-chip">
-                <span class="map-chip-dot" style="background:var(--warn)"></span>
+            </span>
+            <span class="map-legend-chip map-chip-warn">
+                <span class="map-chip-dot map-chip-dot-warn"></span>
                 Moderate 40–60
-            </div>
-            <div class="map-legend-chip crit-chip">
-                <span class="map-chip-dot" style="background:var(--crit)"></span>
+            </span>
+            <span class="map-legend-chip map-chip-crit">
+                <span class="map-chip-dot map-chip-dot-crit"></span>
                 Loud &gt;60 dB
-            </div>
-            <button class="btn btn-outline btn-sm" id="mapResetBtn" onclick="resetZoneMap()">
-                ↺ Reset View
-            </button>
+            </span>
+            <button class="btn btn-outline btn-sm" onclick="resetZoneMap()">↺ Reset</button>
         </div>
     </div>
 
-    <!-- Map container -->
-    <div id="zoneMap" style="height:380px;border-radius:10px;border:1px solid var(--gray-200);overflow:hidden;"></div>
+    <div id="zoneMap" class="zone-map-container"></div>
 
-    <!-- Last updated note -->
-    <div style="margin-top:10px;font-size:11.5px;color:var(--gray-400);text-align:right;">
-        Last map refresh: <span id="mapLastUpdate">—</span>
+    <div class="card-footer-note">
+        Last updated: <span id="mapLastUpdate">—</span>
     </div>
 </div>
 <?php endif; ?>
 
+<!-- ════════════════════════════════════════════════════════════
+     LIVE ACTIVITY LOG  (Admin only)
+     ════════════════════════════════════════════════════════════ -->
 <?php if (hasRole('Administrator')): ?>
-<!-- ═══════════════════════════════════════════════════════════
-     LIVE ACTIVITY LOG WIDGET — Admin only
-     ═══════════════════════════════════════════════════════════ -->
-<div class="card" style="margin-top:20px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+<div class="card card-stack">
+    <div class="card-header">
         <div>
-            <div class="card-title" style="margin-bottom:2px;">📋 Live Activity Log</div>
-            <div style="font-size:12px;color:var(--gray-400);">Recent user actions &nbsp;·&nbsp; Auto-refreshes every 15s</div>
+            <div class="card-title-lg">📋 Live Activity Log</div>
+            <div class="card-subtitle">Recent user actions · auto-refreshes every 15 s</div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-            <!-- Mini stats -->
-            <div id="actToday"  style="font-size:11.5px;color:var(--gray-400);">Today: <strong style="color:var(--blue-600);">—</strong></div>
-            <div id="actUsers"  style="font-size:11.5px;color:var(--gray-400);">Users: <strong style="color:var(--blue-600);">—</strong></div>
+        <div class="act-header-right">
+            <span id="actToday"  class="act-stat">Today: <strong id="actTodayVal">—</strong></span>
+            <span id="actUsers"  class="act-stat">Users: <strong id="actUsersVal">—</strong></span>
             <a href="<?= BASE_URL ?>/activity_log.php" class="btn btn-outline btn-sm">View All</a>
         </div>
     </div>
-
-    <!-- Activity feed -->
-    <div id="activityFeed" style="min-height:120px;">
-        <div style="text-align:center;padding:30px;color:var(--gray-300);font-size:13px;">Loading activity...</div>
+    <div id="activityFeed" class="activity-feed">
+        <div class="act-loading">Loading activity…</div>
     </div>
 </div>
 <?php endif; ?>
 
-</div><!-- /data-base -->
-
 <?php
-$extraScripts = '
-<script src="' . BASE_URL . '/js/charts.js"></script>
+// ── PHP → JS data bridge ──────────────────────────────────────
+// Only the data values go here. All logic lives in the JS blocks below.
+$jsHasMap    = hasRole('Administrator', 'Library Manager') ? 'true' : 'false';
+$jsHasActLog = hasRole('Administrator') ? 'true' : 'false';
+$jsChartData = json_encode(array_values($chartData));
+$jsLabels    = json_encode($chartLabels);
+$jsZoneNames = json_encode(array_column($zones, 'name'));
+
+$extraScripts = <<<JS
+<script src="<?= BASE_URL ?>/js/charts.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-// ─────────────────────────────────────────────────────────────
-//  PHP → JS data bridge
-// ─────────────────────────────────────────────────────────────
-// BASE_URL already declared by app.js — reuse it
-const HAS_MAP     = ' . (hasRole('Administrator', 'Library Manager') ? 'true' : 'false') . ';
-
-// ─────────────────────────────────────────────────────────────
-//  EXISTING: zone progress bars + chart + countdown
-// ─────────────────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", function() {
-
-    // Init zone progress bars
-    document.querySelectorAll(".db-bar-fill[data-pct]").forEach(el => {
-        const pct = parseFloat(el.dataset.pct) || 0;
-        setTimeout(() => { el.style.width = pct + "%"; }, 100);
-    });
-
-    // Noise history chart
-    const chartLabels = ' . json_encode($chartLabels) . ';
-    const chartData   = ' . json_encode(array_values($chartData)) . ';
-    const zoneNames   = ' . json_encode(array_column($zones, 'name')) . ';
-
-    if (chartData.length && chartData[0].length) {
-        const datasets = chartData.map((d, i) => ({ label: zoneNames[i] || "Zone " + (i+1), data: d }));
-        setTimeout(() => renderNoiseChart("noiseChart", datasets, chartLabels), 200);
-    }
-
-    // Next-read countdown
-    const nextRead = document.getElementById("nextRead");
-    if (nextRead) {
-        const interval = 7 * 60;
-        let remaining  = interval;
-        const tick = () => {
-            const m = Math.floor(remaining / 60);
-            const s = remaining % 60;
-            nextRead.textContent = m + "m " + String(s).padStart(2,"0") + "s";
-            if (remaining-- <= 0) { remaining = interval; refreshZoneLevels(); }
-        };
-        tick();
-        setInterval(tick, 1000);
-    }
-
-    // ─────────────────────────────────────────────────────────
-    //  ZONE MAP (Admin & Library Manager only)
-    // ─────────────────────────────────────────────────────────
-    if (!HAS_MAP) return;
-
-    const MAP_CENTER = [8.359282, 124.867826]; // NBSC Campus centre
-    const MAP_ZOOM   = 20;
-
-    // Colour helpers
-    const STATUS_COLOR = { safe:"#10b981", warning:"#f59e0b", critical:"#ef4444" };
-    const STATUS_PULSE = { safe:"16,185,129", warning:"245,158,11", critical:"239,68,68" };
-
-    // ── Init Leaflet ──────────────────────────────────────────
-    const map = L.map("zoneMap", {
-        center: MAP_CENTER,
-        zoom:   MAP_ZOOM,
-        zoomControl: true,
-    });
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a>",
-        maxZoom: 22
-    }).addTo(map);
-
-    // marker registry
-    const markers = {};
-
-    // ── Build a DivIcon marker ────────────────────────────────
-    function buildIcon(zone) {
-        const color  = STATUS_COLOR[zone.status]  || "#64748b";
-        const pulseRgb = STATUS_PULSE[zone.status] || "100,116,139";
-        const isCrit = zone.status === "critical";
-
-        return L.divIcon({
-            className: "",
-            iconSize:   [52, 52],
-            iconAnchor: [26, 26],
-            html: `<div style="
-                width:52px;height:52px;border-radius:50%;
-                background:${color}20;
-                border:2.5px solid ${color};
-                display:flex;align-items:center;justify-content:center;
-                cursor:pointer;
-                box-shadow:0 0 0 4px ${color}18, 0 4px 14px rgba(0,0,0,.25);
-                --pulse-rgb:${pulseRgb};
-            " class="${isCrit ? "zone-marker-critical" : ""}">
-                <div style="text-align:center;line-height:1.1;">
-                    <div style="font-weight:800;font-size:12px;color:${color};font-family:\'Space Grotesk\',sans-serif;">${zone.level.toFixed(0)}</div>
-                    <div style="font-size:8px;color:${color};opacity:.75;font-weight:600;">dB</div>
-                </div>
-            </div>`
-        });
-    }
-
-    // ── Build popup HTML ──────────────────────────────────────
-    function buildPopup(zone) {
-        const color = STATUS_COLOR[zone.status] || "#64748b";
-        const batColor = zone.battery > 60 ? "#10b981" : zone.battery > 30 ? "#f59e0b" : "#ef4444";
-        return `
-        <div style="padding:14px 16px 16px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-                <div>
-                    <div style="font-family:\'Space Grotesk\',sans-serif;font-weight:700;font-size:14px;color:#0f172a;">${zone.name}</div>
-                    <div style="font-size:11px;color:#94a3b8;margin-top:1px;">${zone.floor} · ${zone.sensor}</div>
-                </div>
-                <span style="
-                    background:${color}18;color:${color};
-                    border:1px solid ${color}40;
-                    font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;
-                    text-transform:uppercase;letter-spacing:.4px;
-                ">${zone.label}</span>
-            </div>
-
-            <div style="font-family:\'Space Grotesk\',sans-serif;font-size:30px;font-weight:800;color:${color};margin-bottom:12px;line-height:1;">
-                ${zone.level.toFixed(1)}
-                <span style="font-size:13px;font-weight:400;color:#94a3b8;"> dB</span>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11.5px;">
-                <div style="background:#f8fafc;border-radius:6px;padding:6px 10px;">
-                    <div style="color:#94a3b8;font-size:10px;margin-bottom:2px;">OCCUPIED</div>
-                    <div style="font-weight:600;color:#334155;">${zone.occupied}/${zone.capacity}</div>
-                </div>
-                <div style="background:#f8fafc;border-radius:6px;padding:6px 10px;">
-                    <div style="color:#94a3b8;font-size:10px;margin-bottom:2px;">BATTERY</div>
-                    <div style="font-weight:600;color:${batColor};">${zone.battery}%</div>
-                </div>
-                <div style="background:#f8fafc;border-radius:6px;padding:6px 10px;">
-                    <div style="color:#94a3b8;font-size:10px;margin-bottom:2px;">WARN AT</div>
-                    <div style="font-weight:600;color:#f59e0b;">${zone.warnAt} dB</div>
-                </div>
-                <div style="background:#f8fafc;border-radius:6px;padding:6px 10px;">
-                    <div style="color:#94a3b8;font-size:10px;margin-bottom:2px;">CRIT AT</div>
-                    <div style="font-weight:600;color:#ef4444;">${zone.critAt} dB</div>
-                </div>
-            </div>
-        </div>`;
-    }
-
-    // ── Fetch zones and render/refresh markers ─────────────────
-    function loadMapZones() {
-        fetch(BASE_URL + "/api/zone_map.php", { cache: "no-store" })
-            .then(r => r.json())
-            .then(zones => {
-                zones.forEach(zone => {
-                    if (!zone.lat || !zone.lng) return;
-
-                    if (markers[zone.id]) {
-                        // Update existing marker
-                        markers[zone.id].setIcon(buildIcon(zone));
-                        markers[zone.id].setPopupContent(buildPopup(zone));
-                    } else {
-                        // Create new marker
-                        const m = L.marker([zone.lat, zone.lng], { icon: buildIcon(zone) })
-                            .addTo(map)
-                            .bindPopup(buildPopup(zone), { maxWidth: 240, minWidth: 220 });
-                        markers[zone.id] = m;
-                    }
-                });
-
-                // Timestamp
-                const el = document.getElementById("mapLastUpdate");
-                if (el) {
-                    el.textContent = new Date().toLocaleTimeString("en-PH", {
-                        hour: "2-digit", minute: "2-digit", second: "2-digit"
-                    });
-                }
-            })
-            .catch(() => {});
-    }
-
-    // Initial load
-    loadMapZones();
-
-    // Refresh every 30 seconds (lightweight — matches alert badge polling)
-    setInterval(loadMapZones, 30000);
-
-    // Expose reset for the button
-    window.resetZoneMap = function() {
-        map.setView(MAP_CENTER, MAP_ZOOM);
-    };
-});
-
-// ─────────────────────────────────────────────────────────────
-//  LIVE ACTIVITY LOG WIDGET (Admin only)
-// ─────────────────────────────────────────────────────────────
-const actFeed = document.getElementById("activityFeed");
-if (actFeed) {
-    const ACTION_COLOR = {
-        "Login": "#10d98e", "Logout": "#8892a4",
-        "Add": "#4f8ef7",   "Edit": "#f5a623",
-        "Delete": "#f44336","Clear": "#f44336",
-        "Override": "#f5a623","View": "#8892a4",
-        "Resolve": "#10d98e","Generated": "#4f8ef7",
-        "Exported": "#4f8ef7","Updated": "#f5a623",
-    };
-    function actionColor(action) {
-        for (const [k,v] of Object.entries(ACTION_COLOR)) {
-            if (action.includes(k)) return v;
-        }
-        return "#8892a4";
-    }
-    function roleClass(role) {
-        if (role === "Administrator")   return "background:rgba(79,142,247,.12);color:#1e40af;";
-        if (role === "Library Manager") return "background:rgba(245,158,11,.1);color:#92400e;";
-        return "background:rgba(0,0,0,.05);color:#525e72;";
-    }
-    function timeAgo(ts) {
-        const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
-        if (diff < 60)   return diff + "s ago";
-        if (diff < 3600) return Math.floor(diff/60) + "m ago";
-        if (diff < 86400)return Math.floor(diff/3600) + "h ago";
-        return new Date(ts).toLocaleDateString("en-PH");
-    }
-
-    let lastTs = null;
-
-    function loadActivity() {
-        const url = BASE_URL + "/api/activity_log.php?limit=12" + (lastTs ? "&since=" + encodeURIComponent(lastTs) : "");
-        fetch(url, { cache: "no-store" })
-            .then(r => r.json())
-            .then(data => {
-                // Update mini-stats
-                const todayEl = document.getElementById("actToday");
-                const usersEl = document.getElementById("actUsers");
-                if (todayEl && data.stats) todayEl.innerHTML = "Today: <strong style=\"color:var(--blue-600)\">" + (data.stats.today||0) + "</strong>";
-                if (usersEl && data.stats) usersEl.innerHTML = "Users: <strong style=\"color:var(--blue-600)\">" + (data.stats.unique_users||0) + "</strong>";
-
-                if (!data.logs || !data.logs.length) {
-                    if (!lastTs) actFeed.innerHTML = "<div style=\"text-align:center;padding:30px;color:var(--gray-300);font-size:13px;\">No activity yet.</div>";
-                    return;
-                }
-
-                // First load — render all
-                if (!lastTs) {
-                    actFeed.innerHTML = "";
-                    data.logs.forEach(renderRow);
-                } else {
-                    // Prepend new rows with flash
-                    data.logs.forEach(log => {
-                        const row = renderRow(log, true);
-                        actFeed.insertBefore(row, actFeed.firstChild);
-                        row.style.animation = "actFlash .8s ease";
-                    });
-                    // Keep max 12 rows
-                    while (actFeed.children.length > 12) actFeed.removeChild(actFeed.lastChild);
-                }
-                lastTs = data.ts;
-            })
-            .catch(() => {});
-    }
-
-    function renderRow(log, returnEl) {
-        const color = actionColor(log.action);
-        const div = document.createElement("div");
-        div.style.cssText = "display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-100);";
-        div.innerHTML = \`
-            <div style="width:32px;height:32px;border-radius:8px;background:\${color}18;border:1px solid \${color}40;
-                        display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;">
-                \${log.action.includes("Login")?"🔑":log.action.includes("Delete")||log.action.includes("Clear")?"🗑":log.action.includes("Add")||log.action.includes("Create")?"➕":log.action.includes("Override")?"🎛":log.action.includes("Resolve")?"✅":log.action.includes("Export")?"📥":"📋"}
-            </div>
-            <div style="flex:1;min-width:0;">
-                <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px;">
-                    <span style="font-weight:600;font-size:13px;color:var(--gray-800);">\${log.user_name}</span>
-                    <span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:5px;\${roleClass(log.user_role)}">\${log.user_role}</span>
-                    <span style="font-size:11px;font-weight:600;color:\${color};background:\${color}12;padding:1px 7px;border-radius:5px;">\${log.action}</span>
-                </div>
-                <div style="font-size:11.5px;color:var(--gray-500);">\${log.detail||""}</div>
-                <div style="display:flex;align-items:center;gap:10px;margin-top:3px;font-size:10.5px;color:var(--gray-300);">
-                    <span>\${log.page||""}</span>
-                    <span>\${log.ip||""}</span>
-                    <span style="margin-left:auto;">\${timeAgo(log.created_at)}</span>
-                </div>
-            </div>\`;
-        if (!returnEl) actFeed.appendChild(div);
-        return div;
-    }
-
-    // CSS for new-row flash
-    const style = document.createElement("style");
-    style.textContent = "@keyframes actFlash { 0%{background:rgba(79,142,247,.12)} 100%{background:transparent} }";
-    document.head.appendChild(style);
-
-    loadActivity();
-    setInterval(loadActivity, 15000);
-}
-</script>';
+// ── Data from PHP ─────────────────────────────────────────────
+const CHART_DATA  = {$jsChartData};
+const CHART_LBLS  = {$jsLabels};
+const ZONE_NAMES  = {$jsZoneNames};
+const HAS_MAP     = {$jsHasMap};
+const HAS_ACT_LOG = {$jsHasActLog};
+</script>
+<script src="<?= BASE_URL ?>/js/dashboard.js"></script>
+JS;
 
 include __DIR__ . '/includes/layout_footer.php';
 ?>
