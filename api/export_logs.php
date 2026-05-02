@@ -1,6 +1,8 @@
 <?php
 // ============================================================
 // api/export_logs.php — Export activity logs as CSV
+// UPDATED: browser column added to CSV output to match the
+//          new activity_logs schema in setup.sql.
 // ============================================================
 require_once __DIR__ . '/../includes/config.php';
 requireLogin();
@@ -15,7 +17,9 @@ if (!empty($_GET['user']))   { $where[] = 'user_id = ?';          $params[] = $_
 if (!empty($_GET['action'])) { $where[] = 'action = ?';           $params[] = $_GET['action']; }
 if (!empty($_GET['date']))   { $where[] = 'DATE(created_at) = ?'; $params[] = $_GET['date']; }
 
-$stmt = $db->prepare('SELECT * FROM activity_logs WHERE ' . implode(' AND ', $where) . ' ORDER BY created_at DESC');
+$stmt = $db->prepare(
+    'SELECT * FROM activity_logs WHERE ' . implode(' AND ', $where) . ' ORDER BY created_at DESC'
+);
 $stmt->execute($params);
 $logs = $stmt->fetchAll();
 
@@ -27,7 +31,7 @@ header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Pragma: no-cache');
 
 $out = fopen('php://output', 'w');
-fputcsv($out, ['#', 'User', 'Role', 'Action', 'Detail', 'Page', 'IP Address', 'User Agent', 'Date & Time']);
+fputcsv($out, ['#', 'User', 'Role', 'Action', 'Detail', 'Page', 'IP Address', 'Browser', 'User Agent', 'Date & Time']);
 
 foreach ($logs as $i => $log) {
     fputcsv($out, [
@@ -38,9 +42,11 @@ foreach ($logs as $i => $log) {
         $log['detail'],
         $log['page'],
         $log['ip'],
+        $log['browser'] ?? '',       // new column
         $log['user_agent'],
         $log['created_at'],
     ]);
 }
+
 fclose($out);
 exit;
